@@ -1,6 +1,5 @@
 //to do :
 // - faut-il inverser le sens de communication ?
-// - peut-on laisser les int ou vaut-il mieux passer en byte ?
 // - plutot faire des design generatifs, ce sera plus beau...
 // - peut-on éteindre les moteurs entre les changements ou pas ?
 // - essayer 8 pas à la place de 4 (pour le bruit ? et ou la vitesse ?)
@@ -29,7 +28,7 @@
 #define STATE_FRAME 3
 
 const PROGMEM uint16_t frame[] = {
-  180, 180, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 360, 20, 380, 40, 400, 60, 420, 80, 440, 100, 460, 120, 480, 140, 500, 0, 360, 20, 380, 40, 400, 60, 420, 80, 440, 100, 460, 120, 480, 140, 500,0, 360, 20, 380, 40, 400, 60, 420, 80, 440, 100, 460, 120, 480, 140, 500, 
   180, 540, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   540, 540, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -42,15 +41,15 @@ const PROGMEM uint16_t chiffres[] = {
   180, 180, 540, 360, 180, 180, 540, 360, 180, 180,   0, 540,
   360, 360, 360, 360,   0, 180, 540, 360, 450, 450,   0,   0,
   180, 360, 540, 540,   0, 180, 540, 360, 180, 180,   0, 540,
-  180, 360, 540, 540, 180, 360, 540, 360,   0, 180,   0, 540,
+  180, 360, 540, 540,   0, 360, 540, 360,   0, 180,   0, 540,
   180, 180, 540, 360, 450, 450,   0, 360, 450, 450,   0,   0,
   180, 360, 540, 360, 180, 360, 540, 360,   0, 180,   0, 540,
-  180, 360, 540, 360,   0, 180,   0, 540, 180, 180,   0, 540
+  180, 360, 540, 360,   0, 180,   0, 360, 180, 180,   0, 540
 };
 
 Rtc_DS1302 rtc;
-byte stepLittle[4] = {B10100000, B01100000, B01010000, B10010000};
-byte stepBig[4] = {B00001010, B00000110, B00000101, B00001001};
+byte stepBig[4] = {B10100000, B01100000, B01010000, B10010000};
+byte stepLittle[4] = {B00001010, B00001001, B00000101, B00000110};
 unsigned int little[N_CLOCK];
 unsigned int big[N_CLOCK];
 unsigned int littleNext[N_CLOCK];
@@ -83,6 +82,7 @@ void setup() {
 void loop() {
   digitalWrite(LED_PIN, HIGH);
   if (!digitalRead(BUTTON_DISABLE_PIN)) {
+    Serial.println("disable");
     for (int i = 0; i < N_CLOCK; i++) {
       littleNext[i] = STEP / 2;
       bigNext[i] = STEP / 2;
@@ -93,18 +93,19 @@ void loop() {
     chrono = millis();
   }
   if (!digitalRead(BUTTON_UPDATE_PIN)) {
+    Serial.println("update");
+    rtc.readTime();
     for (int i = 0; i < N_CLOCK; i++) {
       littleNext[i] = (rtc.hour % 12) * STEP / 12;
       bigNext[i] = rtc.minute * STEP / 60;
     }
     moveLittleBig();
-    digitalWrite(MOTOR_ENABLE_PIN, LOW);
     state = STATE_OFF;
     chrono = millis();
   }
   switch (state) {
     case STATE_OFF:
-      if (millis() - chrono > 5000) {
+      if (millis() - chrono > 10000) {
         digitalWrite(MOTOR_ENABLE_PIN, HIGH);
         state = STATE_CLOCK;
         chrono = millis();
@@ -112,6 +113,8 @@ void loop() {
     break;
     case STATE_CLOCK:
       rtc.readTime();
+      Serial.print(rtc.hour);
+      Serial.println(rtc.minute);
       int myChiffres[4];
       myChiffres[0] = rtc.hour / 10;
       myChiffres[1] = rtc.hour % 10;
@@ -126,8 +129,8 @@ void loop() {
         }
       }
       moveLittleBig();
-      if (millis() - chrono > 5000) {
-        state = STATE_RANDOM;
+      if (millis() - chrono > 15000) {
+        state = STATE_FRAME;
         chrono = millis();
       }
     break;
@@ -148,7 +151,7 @@ void loop() {
         bigNext[i] = pgm_read_word_near(frame + i * 2 + 1);
       }
       moveLittleBig();
-      if (millis() - chrono > 5000) {
+      if (millis() - chrono > 15000) {
         state = STATE_CLOCK;
         chrono = millis();
       }
